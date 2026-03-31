@@ -7,6 +7,7 @@ import time
 from docx import Document
 from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from io import BytesIO
+import docx
 
 # 1. 페이지 설정
 st.set_page_config(page_title="Samsung Securities FO Strategy", page_icon="💙", layout="wide")
@@ -41,9 +42,7 @@ def add_hyperlink(paragraph, url, text):
     paragraph._p.append(hyperlink)
     return hyperlink
 
-import docx # 헬퍼 함수에서 사용하기 위해 임포트
-
-# --- 분석 리포트 생성 함수 ---
+# --- 워드 리포트 생성 함수 ---
 def create_word_report(report_items):
     doc = Document()
     doc.add_heading('Samsung Securities FO Strategic Intelligence Report', 0)
@@ -51,14 +50,13 @@ def create_word_report(report_items):
     doc.add_paragraph("-" * 50)
 
     for item in report_items:
-        doc.add_heading(item['title'], level=1)
+        # 제목 (언론사) 형식으로 워드 저장
+        doc.add_heading(f"{item['title']} ({item['source']})", level=1)
         
-        # 하이퍼링크 추가
         p = doc.add_paragraph("Original Article: ")
         add_hyperlink(p, item['link'], "Click here to read the full article")
         
         doc.add_paragraph(f"Published Date: {item['date']}")
-        
         doc.add_heading('Strategic Analysis', level=2)
         doc.add_paragraph(item['analysis'])
         doc.add_page_break()
@@ -70,8 +68,8 @@ def create_word_report(report_items):
 
 # 2. 뉴스 크롤링 함수
 def get_news(keyword):
-    sources = ["JPMorgan", "Goldman Sachs", "UBS", "Morgan Stanley", "Bloomberg", "Reuters", "Financial Times", "Forbes", "WSJ", "Blackstone", "KKR", "BlackRock"]
-    full_query = f'("{keyword}") AND ({" OR ".join([f'"{s}"' for s in sources])})'
+    sources_list = ["JPMorgan", "Goldman Sachs", "UBS", "Morgan Stanley", "Bloomberg", "Reuters", "Financial Times", "Forbes", "WSJ", "Blackstone", "KKR", "BlackRock", "Julius Baer", "Pictet"]
+    full_query = f'("{keyword}") AND ({" OR ".join([f'"{s}"' for s in sources_list])})'
     
     def fetch(query):
         encoded = quote(query)
@@ -91,16 +89,21 @@ def get_news(keyword):
     if not res: res = fetch(f'"{keyword}"')
     return res[:news_count]
 
-# 3. AI 분석 함수 (단일 전략 강화형)
+# 3. AI 분석 함수 (명칭 변경 반영)
 def analyze_article(title, link):
     if not api_key: return "API Key Error"
     client = openai.OpenAI(api_key=api_key)
     prompt = f"""
-    당신은 삼성증권 전략기획실 수석 컨설턴트입니다. 다음 뉴스를 바탕으로 '단일 핵심 전략 분석서'를 작성하세요.
+    당신은 삼성증권 전략기획실 수석 컨설턴트입니다. 다음 뉴스를 바탕으로 전략 리포트를 작성하세요.
     뉴스 제목: {title}
-    1. 초정밀 심층 요약: 30문장 내외로 상세히 요약. 글로벌 시장 맥락 포함.
-    2. 삼성증권 패밀리오피스 단일 핵심 전략: 
-       ① [제안 내용] ② [선정 이유 및 전략적 타당성] ③ [기대 효과 및 향후 과제]
+
+    [보고서 양식]
+    1. 요약: 기사의 핵심 내용과 배경을 30문장 내외로 상세히 요약.
+    2. 전략 아이디어: 
+       ① [전략]: 삼성증권 SNI가 실행해야 할 구체적인 방안.
+       ② [선정이유 및 전략적 타당성]: 글로벌 사례와 국내 시장 특수성을 결합한 분석.
+       ③ [기대 효과 및 향후 과제]: 예상 성과와 실행 로드맵.
+    
     언어: 한국어 (전문 비즈니스 문체)
     """
     response = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}], temperature=0.4)
@@ -114,25 +117,27 @@ if st.button('🚀 분석 및 리포트 생성'):
     if not api_key:
         st.error("OpenAI API Key를 설정해 주세요.")
     else:
-        with st.spinner('데이터 분석 및 워드 파일 생성 중...'):
+        with st.spinner('글로벌 트렌드 분석 중...'):
             news_items = get_news("family office")
             if not news_items:
                 st.warning("최근 7일 이내 뉴스가 없습니다.")
             else:
                 all_reports = []
                 for item in news_items:
+                    # 언론사 이름 추출
+                    source_name = getattr(item, 'source', {}).get('title', 'Global Source')
                     analysis_result = analyze_article(item.title, item.link)
                     
-                    # 화면 표시
+                    # 화면 표시: # 제목 (언론사) 형태
                     with st.container():
-                        st.markdown(f"### 📑 {item.title}")
-                        st.write(f"[Original Link]({item.link})")
+                        st.markdown(f"## {item.title} ({source_name})")
+                        st.write(f"🔗 [기사 원문 링크]({item.link})")
                         st.markdown(analysis_result)
                         st.divider()
                     
-                    # 데이터 저장 (워드 생성용)
                     all_reports.append({
                         'title': item.title,
+                        'source': source_name,
                         'link': item.link,
                         'date': getattr(item, 'published', 'N/A'),
                         'analysis': analysis_result
@@ -142,7 +147,6 @@ if st.button('🚀 분석 및 리포트 생성'):
                 # 워드 파일 생성
                 docx_file = create_word_report(all_reports)
                 
-                # 다운로드 버튼 표시
                 st.download_button(
                     label="📂 워드 파일(.docx) 다운로드",
                     data=docx_file,
