@@ -10,7 +10,16 @@ st.set_page_config(page_title="Samsung Securities FO Intel", page_icon="💙", l
 
 with st.sidebar:
     st.title("⚙️ Strategy Settings")
-    api_key = st.text_input("OpenAI API Key", type="password")
+    
+    # 1. 먼저 Secrets에서 키를 찾습니다.
+    # 2. 만약 Secrets에 없다면(로컬 테스트용) 입력창을 보여줍니다.
+    if "OPENAI_API_KEY" in st.secrets:
+        api_key = st.secrets["OPENAI_API_KEY"]
+        st.success("✅ API Key가 설정에서 로드되었습니다.")
+    else:
+        api_key = st.text_input("OpenAI API Key를 입력하세요", type="password")
+        st.warning("⚠️ 자동 로그인을 위해 Streamlit Cloud의 Secrets 설정을 권장합니다.")
+        
     news_count = st.slider("최대 분석 뉴스 개수", 1, 10, 5)
     st.info("글로벌 최신 뉴스를 기반으로 삼성증권 SNI 전략을 도출합니다.")
 
