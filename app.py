@@ -1,115 +1,123 @@
 import streamlit as st
 import feedparser
-from datetime import datetime
+from datetime import datetime, timedelta
 import openai
 from urllib.parse import quote
+import time
 
-# 1. 페이지 설정 및 디자인
-st.set_page_config(page_title="FO Deep Intelligence", page_icon="🏛️", layout="wide")
+# 1. 페이지 설정
+st.set_page_config(page_title="Samsung Securities FO Intel", page_icon="💙", layout="wide")
 
-# 사이드바 설정
 with st.sidebar:
-    st.title("⚙️ Intelligence Settings")
+    st.title("⚙️ Strategy Settings")
     api_key = st.text_input("OpenAI API Key", type="password")
-    news_count = st.slider("가져올 뉴스 개수", 3, 15, 8)
+    news_count = st.slider("최대 분석 뉴스 개수", 3, 15, 7)
     st.info("""
-    **분석 타겟:**
-    - Global IBs & Private Banks (JPM, GS, UBS, Julius Baer 등)
-    - Global Consulting Firms (McKinsey, BCG, Deloitte 등)
-    - Family Office Governance & Asset Allocation
+    **분석 목표:**
+    - 글로벌 트렌드 기반 삼성증권 FO 전략 도출
+    - SNI 서비스 고도화 및 장기 로드맵 인사이트
     """)
 
-st.title("🏛️ Family Office & Global Finance Intelligence")
-st.subheader("글로벌 금융사 및 컨설팅 펌의 패밀리 오피스 동향 분석")
+st.title("💙 Samsung Securities Family Office Strategic Intelligence")
+st.subheader("글로벌 금융 동향 기반 삼성증권 패밀리오피스 전략 보고서")
 st.divider()
 
-# 2. 뉴스 크롤링 함수 (금융사 + 컨설팅 펌 통합 필터링)
+# 2. 뉴스 크롤링 및 날짜 필터링 함수
 def get_news(keyword):
-    # 금융사 및 컨설팅 펌 키워드 대폭 확장
+    # 금융/컨설팅/사모펀드 검색 범위 확장
     entities = [
-        "JPMorgan", "Goldman Sachs", "Morgan Stanley", "UBS", "Pictet", 
-        "Julius Baer", "Deutsche Bank", "Barclays", "BNP Paribas", "HSBC", 
-        "Nomura", "Lombard Odier", "Citi Private Bank", "McKinsey", "BCG", 
-        "Bain & Company", "Deloitte", "PwC", "EY", "KPMG", "Rockefeller", "Northern Trust"
+        "JPMorgan", "Goldman Sachs", "UBS", "Julius Baer", "Morgan Stanley",
+        "McKinsey", "BCG", "Deloitte", "PwC", "Blackstone", "KKR", "BlackRock",
+        "Pictet", "Lombard Odier", "HSBC Private Banking"
     ]
     
-    # "family office"와 위 기업 중 하나라도 포함된 기사 검색
     entities_query = " OR ".join([f'"{e}"' for e in entities])
     full_query = f'({keyword}) AND ({entities_query})'
     encoded_query = quote(full_query)
     
-    # 최근 7일, 글로벌 영어 뉴스 기준
+    # 구글 뉴스 RSS (최근 7일 설정)
     rss_url = f"https://news.google.com/rss/search?q={encoded_query}+when:7d&hl=en-US&gl=US&ceid=US:en"
     feed = feedparser.parse(rss_url)
-    return feed.entries[:news_count]
+    
+    # [업데이트] 파이썬 레벨에서 7일 이내 기사인지 한 번 더 검증
+    filtered_entries = []
+    now = datetime.now()
+    
+    for entry in feed.entries:
+        # 발행일 파싱
+        try:
+            published_time = datetime(*(entry.published_parsed[:6]))
+            if now - published_time <= timedelta(days=7):
+                filtered_entries.append(entry)
+        except:
+            # 날짜 파싱 실패 시 혹시 모르니 포함
+            filtered_entries.append(entry)
+            
+    return filtered_entries[:news_count]
 
-# 3. AI 심층 분석 함수 (분량 및 깊이 강화)
+# 3. 삼성증권 특화 AI 분석 함수
 def analyze_article(title, link):
     if not api_key:
-        return "⚠️ API Key를 입력하면 AI 분석이 표시됩니다."
+        return "⚠️ API Key를 입력하면 전략 보고서가 생성됩니다."
     
     client = openai.OpenAI(api_key=api_key)
     
-    # 프롬프트: 10~15문장 요약 및 전문적 시사점 강조
     prompt = f"""
-    당신은 글로벌 패밀리 오피스 및 자산관리 전략 전문가입니다. 
-    다음 뉴스를 분석하여 전문적인 한국어 보고서를 작성하세요.
+    당신은 삼성증권(Samsung Securities)의 패밀리오피스 및 초고액자산가(UHNWI) 사업 전략팀의 수석 컨설턴트입니다. 
+    다음 뉴스를 분석하여 삼성증권 경영진에게 보고할 '전략 보고서'를 작성하세요.
 
     뉴스 제목: {title}
 
-    [작성 가이드라인]
+    [보고서 작성 가이드라인]
     1. 심층 요약 (Deep Summary): 
-       - 뉴스 내용을 10~15문장 내외의 충분한 분량으로 아주 상세히 요약하세요.
-       - 기사의 배경, 주요 인물/기업의 움직임, 핵심 수치/데이터, 원인과 결과, 향후 전망을 모두 포함해야 합니다.
-       - 전문적인 경제 용어를 적절히 사용하여 깊이 있게 작성하세요.
+       - 뉴스 내용을 10~15문장으로 아주 상세히 요약하세요. 
+       - 기사의 배경, 글로벌 IB/컨설팅 펌의 핵심 액션, 주요 수치 및 시장 전망을 구체적으로 포함하세요.
 
-    2. 전략적 시사점 (Strategic Insights): 
-       - 패밀리 오피스의 자산 배분(Asset Allocation), 리스크 관리, 가업 승계, 혹은 운영 모델 측면에서의 시사점 2-3가지를 제시하세요.
-       - 금융사나 컨설팅 펌의 관점이 패밀리 오피스 운영에 어떤 실질적인 영향을 줄지 분석하세요.
+    2. 삼성증권 패밀리오피스 전략적 시사점 (Strategic Implications for Samsung Securities): 
+       - 이 뉴스가 삼성증권의 패밀리오피스(SNI) 사업 경쟁력 강화에 어떤 의미가 있는지 분석하세요.
+       - 글로벌 리딩 뱅크의 사례를 삼성증권의 국내외 자산관리 모델에 어떻게 이식할 수 있을지 제안하세요.
+
+    3. 삼성증권 장기 전략과의 연결 (Alignment with Long-term Roadmap): 
+       - 삼성증권이 국내 No.1 패밀리오피스를 넘어 글로벌 경쟁력을 갖추기 위해 이 사례를 장기 로드맵(예: 디지털 전환, 글로벌 대체투자 확대, 가업 승계 플랫폼 고도화 등)과 어떻게 연결해야 할지 구체적인 인사이트를 제시하세요.
 
     언어: 한국어
     """
     
     try:
         response = client.chat.completions.create(
-            model="gpt-4o", # 고품질 긴 문장 생성을 위해 GPT-4o 권장
+            model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.5 # 일관성 있는 분석을 위해 온도를 약간 낮춤
+            temperature=0.6
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"❌ 분석 중 오류가 발생했습니다: {str(e)}"
+        return f"❌ 분석 중 오류: {str(e)}"
 
-# 4. 메인 실행 로직
-if st.button('🚀 글로벌 뱅킹 & 컨설팅 동향 분석 시작'):
+# 4. 실행 섹션
+if st.button('🚀 삼성증권 전용 전략 분석 실행'):
     if not api_key:
-        st.error("오른쪽 사이드바에 OpenAI API Key를 입력해주세요.")
+        st.error("OpenAI API Key를 입력해주세요.")
     else:
-        with st.spinner('글로벌 금융 네트워크 및 전략 컨설팅 데이터를 분석 중입니다...'):
+        with st.spinner('최근 7일간의 글로벌 데이터를 필터링하고 삼성증권 전용 인사이트를 도출 중...'):
             news_items = get_news("family office")
             
             if not news_items:
-                st.warning("조건에 맞는 최신 뉴스가 없습니다. 키워드를 넓혀 일반 검색을 수행합니다.")
-                # 필터 없이 일반 검색 시도
-                news_items = get_news("family office")
+                st.warning("최근 7일 이내의 조건에 맞는 뉴스가 없습니다. 검색 범위를 조금 넓혀보세요.")
             
             for item in news_items:
-                with st.expander(f"📑 {item.title}", expanded=True):
-                    # 전체 화면을 넓게 쓰기 위해 컬럼 비중 조절
-                    col1, col2 = st.columns([1, 4])
+                # 카드 형태의 디자인
+                with st.container():
+                    st.markdown(f"### 📑 {item.title}")
                     
-                    with col1:
-                        st.markdown(f"**Source Info**")
-                        st.write(f"[Original Article]({item.link})")
-                        published = getattr(item, 'published', '날짜 정보 없음')
-                        st.caption(f"발행일: {published}")
-                        st.divider()
-                        st.info("🔍 **IB & Consulting Trend**")
+                    # 정보 요약 바
+                    published = getattr(item, 'published', '날짜 정보 없음')
+                    st.caption(f"🗓️ 발행일: {published} | 🔗 [Original Source]({item.link})")
                     
-                    with col2:
-                        analysis = analyze_article(item.title, item.link)
-                        st.markdown(analysis)
+                    # 분석 결과
+                    analysis = analyze_article(item.title, item.link)
+                    st.markdown(analysis)
                     
                     st.divider()
+                    time.sleep(1) # API 레이트 리밋 방지
 else:
-    st.info("버튼을 누르면 주요 글로벌 금융사(IB/PB) 및 컨설팅 펌의 최신 패밀리 오피스 분석 자료를 가져옵니다.")
+    st.info("버튼을 누르면 삼성증권 패밀리오피스 사업을 위한 글로벌 전략 리포트를 생성합니다.")
