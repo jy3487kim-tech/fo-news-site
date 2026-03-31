@@ -2,6 +2,7 @@ import streamlit as st
 import feedparser
 from datetime import datetime
 import openai
+from urllib.parse import quote  # URL 에러 방지를 위해 추가
 
 # 페이지 설정
 st.set_page_config(page_title="Family Office Intelligence", page_icon="🏢", layout="wide")
@@ -20,8 +21,11 @@ st.divider()
 
 # 뉴스 크롤링 함수
 def get_news(keyword):
-    # 구글 뉴스 RSS (한국어/글로벌 혼합 검색)
-    rss_url = f"https://news.google.com/rss/search?q={keyword}+when:1d&hl=ko&gl=KR&ceid=KR:ko"
+    # 검색어 인코딩 (공백 등을 URL 안전 문자로 변환)
+    encoded_keyword = quote(keyword)
+    # 구글 뉴스 RSS URL 구성
+    rss_url = f"https://news.google.com/rss/search?q={encoded_keyword}+when:1d&hl=ko&gl=KR&ceid=KR:ko"
+    
     feed = feedparser.parse(rss_url)
     return feed.entries[:news_count]
 
@@ -30,21 +34,24 @@ def analyze_article(title, link):
     if not api_key:
         return "⚠️ API Key를 입력하면 AI 요약과 시사점이 표시됩니다.", "N/A"
     
-    client = openai.OpenAI(api_key=api_key)
-    prompt = f"""
-    당신은 글로벌 패밀리 오피스 전략 컨설턴트입니다. 다음 뉴스를 보고 보고서를 작성하세요.
-    뉴스 제목: {title}
-    
-    형식:
-    1. 요약: (뉴스 내용을 핵심 위주로 한 문장 요약)
-    2. 시사점: (이 뉴스가 패밀리 오피스의 자산 배분, 가업 승계, 혹은 규제 대응에 주는 구체적인 시사점 2가지)
-    """
-    
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return response.choices[0].message.content
+    try:
+        client = openai.OpenAI(api_key=api_key)
+        prompt = f"""
+        당신은 글로벌 패밀리 오피스 전략 컨설턴트입니다. 다음 뉴스를 보고 보고서를 작성하세요.
+        뉴스 제목: {title}
+        
+        형식:
+        1. 요약: (뉴스 내용을 핵심 위주로 한 문장 요약)
+        2. 시사점: (이 뉴스가 패밀리 오피스의 자산 배분, 가업 승계, 혹은 규제 대응에 주는 구체적인 시사점 2가지)
+        """
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"❌ 분석 중 오류가 발생했습니다: {str(e)}"
 
 # 실행 버튼
 if st.button('✨ 최신 뉴스 분석 시작'):
@@ -52,6 +59,7 @@ if st.button('✨ 최신 뉴스 분석 시작'):
         st.error("오른쪽 사이드바에 OpenAI API Key를 먼저 입력해주세요.")
     else:
         with st.spinner('글로벌 뉴스를 읽고 AI가 분석 중입니다...'):
+            # "family office" 검색어 전달
             news_items = get_news("family office")
             
             if not news_items:
@@ -63,7 +71,9 @@ if st.button('✨ 최신 뉴스 분석 시작'):
                     
                     with col1:
                         st.markdown(f"### [{item.title}]({item.link})")
-                        st.caption(f"발행일: {item.published}")
+                        # 날짜 정보가 없을 경우를 대비해 안전하게 처리
+                        published = getattr(item, 'published', '날짜 정보 없음')
+                        st.caption(f"발행일: {published}")
                     
                     with col2:
                         analysis = analyze_article(item.title, item.link)
